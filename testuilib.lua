@@ -2523,7 +2523,7 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
         local Entry = _0xd5fe._0x36b7("TextButton", {
             Parent = ScrollList,
             BackgroundColor3 = _0xd5fe._0x0e5f.Theme.Section,
-            Size = UDim2.new(1, -4, 0, 42),
+            Size = UDim2.new(1, -4, 0, 30),
             Text = "",
             AutoButtonColor = false,
             BorderSizePixel = 0,
@@ -2536,29 +2536,17 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
             Text = config.name,
             Font = _0xd5fe._0x0e5f.FontBold,
             TextColor3 = _0xd5fe._0x0e5f.Theme.Text,
-            Size = UDim2.new(1, -60, 0, 20),
-            Position = UDim2.new(0, 8, 0, 2),
+            Size = UDim2.new(1, -60, 1, 0),
+            Position = UDim2.new(0, 8, 0, 0),
             BackgroundTransparency = 1,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextSize = 12,
             TextTruncate = Enum.TextTruncate.AtEnd
         })
         
-        local InfoLabel = _0xd5fe._0x36b7("TextLabel", {
-            Parent = Entry,
-            Text = "by " .. config.author,
-            Font = _0xd5fe._0x0e5f.Font,
-            TextColor3 = _0xd5fe._0x0e5f.Theme.TextDim,
-            Size = UDim2.new(1, -60, 0, 16),
-            Position = UDim2.new(0, 8, 0, 22),
-            BackgroundTransparency = 1,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextSize = 11
-        })
-        
         local LikeLabel = _0xd5fe._0x36b7("TextLabel", {
             Parent = Entry,
-            Text = tostring(config.likes or 0) .. " ♥",
+            Text = tostring(config.likes or 0) .. " ",
             Font = _0xd5fe._0x0e5f.FontBold,
             TextColor3 = Color3.fromRGB(255, 100, 120),
             Size = UDim2.new(0, 50, 1, 0),
@@ -2649,10 +2637,13 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
         end)
     end
     
-    -- Upload config name input
-    local uploadNameValue = ""
-    CommunityGroup:AddInput("CC_UploadName", "Config name to upload...", function(text)
-        uploadNameValue = text
+    -- Dropdown of local configs for upload
+    local selectedUploadConfig = ""
+    local localConfigList = self:RefreshConfigList()
+    local uploadDropdownRef = nil
+    
+    uploadDropdownRef = CommunityGroup:AddDropdown("CC_UploadSelect", localConfigList, nil, function(opt)
+        selectedUploadConfig = opt or ""
     end)
     
     CommunityGroup:AddButton("Load Selected", function()
@@ -2665,50 +2656,81 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
             return _0xd5fe._0x0e5f:Notify("Community", "Config has no data", 3, "error")
         end
         
-        local success, parsed = pcall(function()
+        local success, decoded = pcall(function()
             return _0xd5fe._0x740e:JSONDecode(configData)
         end)
         
-        if not success or not parsed then
+        if not success or not decoded then
             return _0xd5fe._0x0e5f:Notify("Community", "Failed to parse config data", 3, "error")
         end
         
         -- Apply config using the same logic as SaveManager:Load
+        -- Config format is {objects: [{idx, type, value}, ...]}
+        if not decoded.objects then
+            return _0xd5fe._0x0e5f:Notify("Community", "Invalid config format", 3, "error")
+        end
+        
+        _0xd5fe._0x0e5f._isLoadingConfig = true
         local loadedCount = 0
-        for key, value in pairs(parsed) do
-            if not _0xd5fe._0x0e5f.SaveManager.Ignore[key] then
-                local option = _0xd5fe._0x0e5f.Options[key]
-                if option then
-                    local parser = _0xd5fe._0x0e5f.SaveManager.Parser[option.Type]
-                    if parser and parser.Load then
-                        local ok = pcall(parser.Load, option, value)
-                        if ok then loadedCount = loadedCount + 1 end
-                    end
-                end
+        
+        local toggles = {}
+        local others = {}
+        for _, option in next, decoded.objects do
+            if option.type == "Toggle" then
+                table.insert(toggles, option)
+            else
+                table.insert(others, option)
             end
         end
         
+        local function loadOption(option)
+            local idx = option.idx
+            local optType = option.type
+            local optionObj = _0xd5fe._0x0e5f.Options[idx]
+            if optionObj and optionObj.Set then
+                local ok = pcall(function()
+                    if optType == "Toggle" then
+                        optionObj:Set(option.value)
+                    elseif optType == "Slider" then
+                        optionObj:Set(option.value)
+                    elseif optType == "Dropdown" then
+                        optionObj:Set(option.value)
+                    elseif optType == "ColorPicker" then
+                        optionObj:Set(Color3.new(option.value[1], option.value[2], option.value[3]))
+                    elseif optType == "Keybind" then
+                        if option.value ~= "None" then
+                            optionObj:Set(Enum.KeyCode[option.value])
+                        end
+                    elseif optType == "Input" then
+                        optionObj:Set(option.value)
+                    elseif optType == "MultiDropdown" then
+                        optionObj:Set(option.value or {})
+                    end
+                end)
+                if ok then loadedCount = loadedCount + 1 end
+            end
+        end
+        
+        for _, option in ipairs(others) do loadOption(option) end
+        task.wait(0.1)
+        for _, option in ipairs(toggles) do loadOption(option) end
+        
+        _0xd5fe._0x0e5f._isLoadingConfig = false
         _0xd5fe._0x0e5f:Notify("Community", "Loaded: " .. selectedCommunityConfig.name .. " (" .. loadedCount .. " settings)", 3, "folder")
     end)
     
-    CommunityGroup:AddButton("Upload Current Config", function()
-        if not uploadNameValue or uploadNameValue:gsub(" ", "") == "" then
-            return _0xd5fe._0x0e5f:Notify("Community", "Enter a config name first", 3, "error")
+    CommunityGroup:AddButton("Upload Selected Config", function()
+        if not selectedUploadConfig or selectedUploadConfig == "" then
+            return _0xd5fe._0x0e5f:Notify("Community", "Select a local config first", 3, "error")
         end
         
-        -- Build current config data using SaveManager:Save logic
-        local configTable = {}
-        for key, option in pairs(_0xd5fe._0x0e5f.Options) do
-            if not _0xd5fe._0x0e5f.SaveManager.Ignore[key] then
-                local parser = _0xd5fe._0x0e5f.SaveManager.Parser[option.Type]
-                if parser and parser.Save then
-                    local ok, val = pcall(parser.Save, option)
-                    if ok then configTable[key] = val end
-                end
-            end
+        -- Read the actual saved config file from disk
+        local filePath = self.Folder .. "/settings/" .. selectedUploadConfig .. ".json"
+        if not isfile(filePath) then
+            return _0xd5fe._0x0e5f:Notify("Community", "Config file not found", 3, "error")
         end
         
-        local configJson = _0xd5fe._0x740e:JSONEncode(configTable)
+        local configJson = readfile(filePath)
         local author = game:GetService("Players").LocalPlayer.Name
         
         _0xd5fe._0x0e5f:Notify("Community", "Uploading...", 2, "info")
@@ -2716,7 +2738,7 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
         task.spawn(function()
             local response, err = httpPost(apiUrl, _0xd5fe._0x740e:JSONEncode({
                     action = "upload",
-                    name = uploadNameValue,
+                    name = selectedUploadConfig,
                     author = author,
                     data = configJson
                 }))
@@ -2731,7 +2753,7 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
             end)
             
             if success and data and data.success then
-                _0xd5fe._0x0e5f:Notify("Community", "Uploaded: " .. uploadNameValue, 3, "check")
+                _0xd5fe._0x0e5f:Notify("Community", "Uploaded: " .. selectedUploadConfig, 3, "check")
                 refreshList()
             else
                 _0xd5fe._0x0e5f:Notify("Community", "Upload failed: " .. (data and data.error or "Unknown error"), 3, "error")
@@ -2774,7 +2796,12 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
     
     CommunityGroup:AddButton("Delete My Config", function()
         if not selectedCommunityConfig then
-            return _0xd5fe._0x0e5f:Notify("Community", "Select a config first", 3, "error")
+            return _0xd5fe._0x0e5f:Notify("Community", "Select a community config first", 3, "error")
+        end
+        
+        -- Check if this config is actually from the community list (has an id)
+        if not selectedCommunityConfig.id then
+            return _0xd5fe._0x0e5f:Notify("Community", "This config is not uploaded", 3, "error")
         end
         
         local author = game:GetService("Players").LocalPlayer.Name
@@ -2809,10 +2836,13 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
     
     CommunityGroup:AddButton("Refresh", function()
         refreshList()
+        if uploadDropdownRef and uploadDropdownRef.Refresh then
+            uploadDropdownRef:Refresh(self:RefreshConfigList())
+        end
     end)
     
     -- Ignore community config UI elements from being saved
-    self:SetIgnoreIndexes({"CC_UploadName"})
+    self:SetIgnoreIndexes({"CC_UploadSelect"})
     
     -- Auto-load on build
     task.spawn(function()
