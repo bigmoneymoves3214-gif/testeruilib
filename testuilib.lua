@@ -2434,15 +2434,36 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
     local configEntryFrames = {}
     
     -- HTTP request helper (executor compatibility)
-    local function httpRequest(options)
+    -- Google Apps Script returns 302 redirects; game:HttpGet follows them automatically
+    local function httpGet(url)
+        local success, result = pcall(function()
+            return game:HttpGet(url)
+        end)
+        if not success then return nil, tostring(result) end
+        return {Body = result}
+    end
+    
+    local function httpPost(url, body)
         local requestFn = (type(request) == "function" and request) 
             or (type(http_request) == "function" and http_request)
             or (type(http) == "table" and http.request)
             or (type(syn) == "table" and syn.request)
             or (type(fluxus) == "table" and fluxus.request)
         if not requestFn then return nil, "No HTTP function available" end
-        local success, result = pcall(requestFn, options)
+        local success, result = pcall(requestFn, {
+            Url = url,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = body
+        })
         if not success then return nil, tostring(result) end
+        -- Handle redirects: if status is 302/301, follow the Location header
+        if result and result.StatusCode and (result.StatusCode == 302 or result.StatusCode == 301) then
+            local location = result.Headers and (result.Headers["Location"] or result.Headers["location"])
+            if location then
+                return httpGet(location)
+            end
+        end
         return result
     end
     
@@ -2584,10 +2605,7 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
         statusLabel:Set("Status: Loading...")
         
         task.spawn(function()
-            local response, err = httpRequest({
-                Url = apiUrl .. "?action=list",
-                Method = "GET"
-            })
+            local response, err = httpGet(apiUrl .. "?action=list")
             
             if not response or not response.Body then
                 statusLabel:Set("Status: Failed to fetch")
@@ -2679,17 +2697,12 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
         _0xd5fe._0x0e5f:Notify("Community", "Uploading...", 2, "info")
         
         task.spawn(function()
-            local response, err = httpRequest({
-                Url = apiUrl,
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = _0xd5fe._0x740e:JSONEncode({
+            local response, err = httpPost(apiUrl, _0xd5fe._0x740e:JSONEncode({
                     action = "upload",
                     name = uploadNameValue,
                     author = author,
                     data = configJson
-                })
-            })
+                }))
             
             if not response or not response.Body then
                 _0xd5fe._0x0e5f:Notify("Community", "Upload failed: " .. (err or "No response"), 3, "error")
@@ -2717,16 +2730,11 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
         local hwid = getHWID()
         
         task.spawn(function()
-            local response, err = httpRequest({
-                Url = apiUrl,
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = _0xd5fe._0x740e:JSONEncode({
+            local response, err = httpPost(apiUrl, _0xd5fe._0x740e:JSONEncode({
                     action = "like",
                     id = selectedCommunityConfig.id,
                     hwid = hwid
-                })
-            })
+                }))
             
             if not response or not response.Body then
                 _0xd5fe._0x0e5f:Notify("Community", "Like failed", 3, "error")
@@ -2758,16 +2766,11 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
         end
         
         task.spawn(function()
-            local response, err = httpRequest({
-                Url = apiUrl,
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = _0xd5fe._0x740e:JSONEncode({
+            local response, err = httpPost(apiUrl, _0xd5fe._0x740e:JSONEncode({
                     action = "delete",
                     id = selectedCommunityConfig.id,
                     author = author
-                })
-            })
+                }))
             
             if not response or not response.Body then
                 _0xd5fe._0x0e5f:Notify("Community", "Delete failed", 3, "error")
