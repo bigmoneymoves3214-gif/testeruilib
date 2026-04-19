@@ -2622,18 +2622,14 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
             local response, err = httpGet(apiUrl .. "?action=list")
             
             if not response then
-                statusLabel:Set("ERR: No response - " .. tostring(err))
-                print("[CommunityConfigs] No response: " .. tostring(err))
+                statusLabel:Set("ERR: No response")
                 return
             end
             
             if not response.Body then
                 statusLabel:Set("ERR: Empty body")
-                print("[CommunityConfigs] Empty body, response: " .. tostring(response))
                 return
             end
-            
-            print("[CommunityConfigs] Raw response (first 300): " .. string.sub(tostring(response.Body), 1, 300))
             
             local success, data = pcall(function()
                 return _0xd5fe._0x740e:JSONDecode(response.Body)
@@ -2641,14 +2637,11 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
             
             if not success then
                 statusLabel:Set("ERR: JSON parse fail")
-                print("[CommunityConfigs] JSON decode error: " .. tostring(data))
-                print("[CommunityConfigs] Body starts with: " .. string.sub(tostring(response.Body), 1, 200))
                 return
             end
             
             if not data or not data.success then
                 statusLabel:Set("ERR: " .. (data and data.error or "Unknown API error"))
-                print("[CommunityConfigs] API error: " .. tostring(data and data.error))
                 return
             end
             
