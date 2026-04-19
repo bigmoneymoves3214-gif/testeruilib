@@ -2509,21 +2509,33 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
     _0xd5fe._0x36b7("UIListLayout", {Parent = ScrollList, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 2)})
     _0xd5fe._0x36b7("UIPadding", {Parent = ScrollList, PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 4), PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4)})
     
+    local configEntryStates = {}
+    
     local function clearList()
         for _, frame in pairs(configEntryFrames) do
             pcall(function() frame:Destroy() end)
         end
         configEntryFrames = {}
+        configEntryStates = {}
         selectedCommunityConfig = nil
     end
     
     local function createConfigEntry(config, index)
         local isSelected = false
         
+        -- Parse ISO timestamp to a clean date string (e.g. "04/18/2026")
+        local dateStr = ""
+        if config.timestamp and config.timestamp ~= "" then
+            local y, m, d = string.match(tostring(config.timestamp), "(%d+)-(%d+)-(%d+)")
+            if y and m and d then
+                dateStr = m .. "/" .. d .. "/" .. y
+            end
+        end
+        
         local Entry = _0xd5fe._0x36b7("TextButton", {
             Parent = ScrollList,
             BackgroundColor3 = _0xd5fe._0x0e5f.Theme.Section,
-            Size = UDim2.new(1, -4, 0, 30),
+            Size = UDim2.new(1, -4, 0, 40),
             Text = "",
             AutoButtonColor = false,
             BorderSizePixel = 0,
@@ -2536,24 +2548,39 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
             Text = config.name,
             Font = _0xd5fe._0x0e5f.FontBold,
             TextColor3 = _0xd5fe._0x0e5f.Theme.Text,
-            Size = UDim2.new(1, -60, 1, 0),
-            Position = UDim2.new(0, 8, 0, 0),
+            Size = UDim2.new(1, -80, 0, 20),
+            Position = UDim2.new(0, 8, 0, 2),
             BackgroundTransparency = 1,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextSize = 12,
-            TextTruncate = Enum.TextTruncate.AtEnd
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Active = false
+        })
+        
+        local DateLabel = _0xd5fe._0x36b7("TextLabel", {
+            Parent = Entry,
+            Text = dateStr,
+            Font = _0xd5fe._0x0e5f.Font,
+            TextColor3 = _0xd5fe._0x0e5f.Theme.TextDim,
+            Size = UDim2.new(0.5, -8, 0, 16),
+            Position = UDim2.new(0, 8, 0, 22),
+            BackgroundTransparency = 1,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextSize = 10,
+            Active = false
         })
         
         local LikeLabel = _0xd5fe._0x36b7("TextLabel", {
             Parent = Entry,
-            Text = tostring(config.likes or 0) .. " ",
+            Text = "Likes: " .. tostring(config.likes or 0),
             Font = _0xd5fe._0x0e5f.FontBold,
             TextColor3 = Color3.fromRGB(255, 100, 120),
-            Size = UDim2.new(0, 50, 1, 0),
-            Position = UDim2.new(1, -55, 0, 0),
+            Size = UDim2.new(0, 70, 0, 16),
+            Position = UDim2.new(1, -75, 0, 22),
             BackgroundTransparency = 1,
             TextXAlignment = Enum.TextXAlignment.Right,
-            TextSize = 12
+            TextSize = 10,
+            Active = false
         })
         
         Entry.MouseEnter:Connect(function()
@@ -2569,24 +2596,23 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
         
         Entry.MouseButton1Click:Connect(function()
             -- Deselect all others
-            for _, otherFrame in pairs(configEntryFrames) do
+            for i, otherFrame in pairs(configEntryFrames) do
+                if configEntryStates[i] then
+                    configEntryStates[i].selected = false
+                end
                 pcall(function()
-                    otherFrame._selected = false
                     _0xd5fe._0xa4bd:Create(otherFrame, TweenInfo.new(0.15), {BackgroundColor3 = _0xd5fe._0x0e5f.Theme.Section}):Play()
                 end)
             end
             -- Select this one
             isSelected = true
-            Entry._selected = true
             selectedCommunityConfig = config
             _0xd5fe._0xa4bd:Create(Entry, TweenInfo.new(0.15), {BackgroundColor3 = _0xd5fe._0x0e5f.AccentColor}):Play()
             statusLabel:Set("Selected: " .. config.name)
         end)
         
-        Entry._selected = false
-        Entry._likeLabel = LikeLabel
-        Entry._config = config
         table.insert(configEntryFrames, Entry)
+        configEntryStates[#configEntryFrames] = {selected = false, config = config, likeLabel = LikeLabel}
     end
     
     local function refreshList()
