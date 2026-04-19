@@ -2672,9 +2672,9 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
         selectedUploadConfig = opt or ""
     end)
     
-    CommunityGroup:AddButton("Load Selected", function()
+    CommunityGroup:AddButton("Save Selected", function()
         if not selectedCommunityConfig then
-            return _0xd5fe._0x0e5f:Notify("Community", "Select a config first", 3, "error")
+            return _0xd5fe._0x0e5f:Notify("Community", "Select a config from the list first", 3, "error")
         end
         
         local configData = selectedCommunityConfig.data
@@ -2682,67 +2682,27 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
             return _0xd5fe._0x0e5f:Notify("Community", "Config has no data", 3, "error")
         end
         
-        local success, decoded = pcall(function()
-            return _0xd5fe._0x740e:JSONDecode(configData)
+        -- Save the community config as a local .json file
+        local saveName = selectedCommunityConfig.name
+        local filePath = self.Folder .. "/settings/" .. saveName .. ".json"
+        
+        local ok, writeErr = pcall(function()
+            writefile(filePath, configData)
         end)
         
-        if not success or not decoded then
-            return _0xd5fe._0x0e5f:Notify("Community", "Failed to parse config data", 3, "error")
+        if not ok then
+            return _0xd5fe._0x0e5f:Notify("Community", "Failed to save: " .. tostring(writeErr), 3, "error")
         end
         
-        -- Apply config using the same logic as SaveManager:Load
-        -- Config format is {objects: [{idx, type, value}, ...]}
-        if not decoded.objects then
-            return _0xd5fe._0x0e5f:Notify("Community", "Invalid config format", 3, "error")
+        _0xd5fe._0x0e5f:Notify("Community", "Saved '" .. saveName .. "' to your configs!", 3, "check")
+        
+        -- Refresh the SaveManager config list and upload dropdown so it appears
+        if _0xd5fe._0x0e5f.Options["SaveManager_ConfigList"] then
+            _0xd5fe._0x0e5f.Options["SaveManager_ConfigList"]:Refresh(self:RefreshConfigList())
         end
-        
-        _0xd5fe._0x0e5f._isLoadingConfig = true
-        local loadedCount = 0
-        
-        local toggles = {}
-        local others = {}
-        for _, option in next, decoded.objects do
-            if option.type == "Toggle" then
-                table.insert(toggles, option)
-            else
-                table.insert(others, option)
-            end
+        if uploadDropdownRef and uploadDropdownRef.Refresh then
+            uploadDropdownRef:Refresh(self:RefreshConfigList())
         end
-        
-        local function loadOption(option)
-            local idx = option.idx
-            local optType = option.type
-            local optionObj = _0xd5fe._0x0e5f.Options[idx]
-            if optionObj and optionObj.Set then
-                local ok = pcall(function()
-                    if optType == "Toggle" then
-                        optionObj:Set(option.value)
-                    elseif optType == "Slider" then
-                        optionObj:Set(option.value)
-                    elseif optType == "Dropdown" then
-                        optionObj:Set(option.value)
-                    elseif optType == "ColorPicker" then
-                        optionObj:Set(Color3.new(option.value[1], option.value[2], option.value[3]))
-                    elseif optType == "Keybind" then
-                        if option.value ~= "None" then
-                            optionObj:Set(Enum.KeyCode[option.value])
-                        end
-                    elseif optType == "Input" then
-                        optionObj:Set(option.value)
-                    elseif optType == "MultiDropdown" then
-                        optionObj:Set(option.value or {})
-                    end
-                end)
-                if ok then loadedCount = loadedCount + 1 end
-            end
-        end
-        
-        for _, option in ipairs(others) do loadOption(option) end
-        task.wait(0.1)
-        for _, option in ipairs(toggles) do loadOption(option) end
-        
-        _0xd5fe._0x0e5f._isLoadingConfig = false
-        _0xd5fe._0x0e5f:Notify("Community", "Loaded: " .. selectedCommunityConfig.name .. " (" .. loadedCount .. " settings)", 3, "folder")
     end)
     
     CommunityGroup:AddButton("Upload Selected Config", function()
@@ -2789,15 +2749,16 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
     
     CommunityGroup:AddButton("Like Selected", function()
         if not selectedCommunityConfig then
-            return _0xd5fe._0x0e5f:Notify("Community", "Select a config first", 3, "error")
+            return _0xd5fe._0x0e5f:Notify("Community", "Select a config from the list first", 3, "error")
         end
         
+        local configToLike = selectedCommunityConfig
         local hwid = getHWID()
         
         task.spawn(function()
             local response, err = httpPost(apiUrl, _0xd5fe._0x740e:JSONEncode({
                     action = "like",
-                    id = selectedCommunityConfig.id,
+                    id = configToLike.id,
                     hwid = hwid
                 }))
             
@@ -2821,24 +2782,29 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
     end)
     
     CommunityGroup:AddButton("Delete My Config", function()
-        if not selectedCommunityConfig then
-            return _0xd5fe._0x0e5f:Notify("Community", "Select a community config first", 3, "error")
-        end
-        
-        -- Check if this config is actually from the community list (has an id)
-        if not selectedCommunityConfig.id then
-            return _0xd5fe._0x0e5f:Notify("Community", "This config is not uploaded", 3, "error")
+        if not selectedUploadConfig or selectedUploadConfig == "" then
+            return _0xd5fe._0x0e5f:Notify("Community", "Select your config from the upload dropdown first", 3, "error")
         end
         
         local author = game:GetService("Players").LocalPlayer.Name
-        if selectedCommunityConfig.author ~= author then
-            return _0xd5fe._0x0e5f:Notify("Community", "You can only delete your own configs", 3, "error")
+        
+        -- Find the matching cloud config by name and author
+        local matchedConfig = nil
+        for _, cfg in ipairs(communityConfigs) do
+            if cfg.name == selectedUploadConfig and cfg.author == author then
+                matchedConfig = cfg
+                break
+            end
+        end
+        
+        if not matchedConfig then
+            return _0xd5fe._0x0e5f:Notify("Community", "'" .. selectedUploadConfig .. "' is not uploaded or not yours", 3, "error")
         end
         
         task.spawn(function()
             local response, err = httpPost(apiUrl, _0xd5fe._0x740e:JSONEncode({
                     action = "delete",
-                    id = selectedCommunityConfig.id,
+                    id = matchedConfig.id,
                     author = author
                 }))
             
@@ -2852,7 +2818,7 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
             end)
             
             if success and data and data.success then
-                _0xd5fe._0x0e5f:Notify("Community", "Deleted!", 3, "trash")
+                _0xd5fe._0x0e5f:Notify("Community", "Deleted '" .. selectedUploadConfig .. "' from cloud!", 3, "check")
                 refreshList()
             else
                 _0xd5fe._0x0e5f:Notify("Community", "Delete failed: " .. (data and data.error or "Unknown"), 3, "error")
