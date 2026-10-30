@@ -30,7 +30,7 @@ _0xd5fe._0x740e = game:GetService("HttpService")
 _0xd5fe._0x0e5f = {
     -- bump this when publishing; print(Library.Version) to confirm which build
     -- the executor actually fetched (raw.githubusercontent caches for ~5 min)
-    Version = "v4.8.1-test",
+    Version = "v4.8.2-test",
     Open = true,
     ToggleKey = Enum.KeyCode.RightControl,
     AccentColor = Color3.fromRGB(96, 76, 255),
@@ -2597,10 +2597,10 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
                     -- sliver with everything clipped out of sight, which reads as
                     -- the dropdown having gone blank. Only the dropdowns whose
                     -- option count changes at runtime could hit it, which is why
-                    -- it only ever showed up on the player ones.
-                    if Open then
-                        ListFrame.Size = UDim2.new(1, 0, 0, math.min(#Options * 28 + 6, 150))
-                    end
+                    -- it only ever showed up on the player ones. Set in BOTH
+                    -- states so a refresh can never leave a stale height behind.
+                    ListFrame.Size = UDim2.new(1, 0, 0,
+                        Open and math.min(#Options * 28 + 6, 150) or 0)
                 end
                 
                 Btn.MouseEnter:Connect(function() if HoverBlocked(Btn) then return end 
@@ -2615,7 +2615,14 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
                 end)
                 
                 Btn.MouseButton1Click:Connect(function()
-                    Open = not Open
+                    -- STATE COMES FROM THE GEOMETRY, not from a cached flag.
+                    -- `Open = not Open` desyncs: anything that collapses the
+                    -- list without clearing the flag leaves Open true while the
+                    -- list is 0 high, and the next click then CLOSES an already
+                    -- closed list - so the first press does nothing visible and
+                    -- the dropdown reads as broken. Measured live: 6 correct
+                    -- options with a 168px canvas inside a ListFrame 0 high.
+                    Open = ListFrame.Size.Y.Offset <= 1
                     if Open then
                         local height = math.min(#Options * 28 + 6, 150)
                         _0xd5fe._0xa4bd:Create(ListFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {Size = UDim2.new(1,0,0,height)}):Play()
@@ -2769,9 +2776,8 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
                     -- this is the one the silent aim whitelist uses, and it is
                     -- refreshed on PlayerAdded/PlayerRemoving, so it can be
                     -- rebuilt while the user is looking at it.
-                    if Open then
-                        ListFrame.Size = UDim2.new(1, 0, 0, math.min(#Options * 28 + 6, 180))
-                    end
+                    ListFrame.Size = UDim2.new(1, 0, 0,
+                        Open and math.min(#Options * 28 + 6, 180) or 0)
                 end
                 
                 Btn.MouseEnter:Connect(function() if HoverBlocked(Btn) then return end 
@@ -2786,7 +2792,8 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
                 end)
                 
                 Btn.MouseButton1Click:Connect(function()
-                    Open = not Open
+                    -- Same geometry-derived state as the single Dropdown above.
+                    Open = ListFrame.Size.Y.Offset <= 1
                     if Open then
                         local height = math.min(#Options * 28 + 6, 180)
                         _0xd5fe._0xa4bd:Create(ListFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {Size = UDim2.new(1,0,0,height)}):Play()
