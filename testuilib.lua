@@ -30,7 +30,7 @@ _0xd5fe._0x740e = game:GetService("HttpService")
 _0xd5fe._0x0e5f = {
     -- bump this when publishing; print(Library.Version) to confirm which build
     -- the executor actually fetched (raw.githubusercontent caches for ~5 min)
-    Version = "v4.8.2-test",
+    Version = "v4.8.3-test",
     Open = true,
     ToggleKey = Enum.KeyCode.RightControl,
     AccentColor = Color3.fromRGB(96, 76, 255),
@@ -2541,10 +2541,19 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
                 end
 
                 local function CreateOption(opt)
-                    local OptBtn = _0xd5fe._0x36b7("TextButton", {Parent = List, BackgroundColor3 = _0xd5fe._0x0e5f.Theme.Outline, BackgroundTransparency = 1, Size = UDim2.new(1,0,0,26), Text = "", AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 52})
-                    local OptText = _0xd5fe._0x36b7("TextLabel", {Parent = OptBtn, Text = opt, BackgroundTransparency = 1, Position = UDim2.new(0,12,0,0), Size = UDim2.new(1,-20,1,0), Font = _0xd5fe._0x0e5f.Font, TextColor3 = _0xd5fe._0x0e5f.Theme.TextDim, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 53})
+                    -- ZINDEX RELATIVE TO THE LIST, never a constant. A settings
+                    -- popup lifts every descendant it can see by +300 on Show,
+                    -- to clear its own opaque background at 300. Options built
+                    -- LATER - by Refresh - missed that pass and were created at
+                    -- a hardcoded 52, so they rendered BEHIND the panel: the
+                    -- rows existed with the right names and canvas height and
+                    -- were simply painted over. That is why only refreshed
+                    -- dropdowns inside a toggle's settings broke, while the same
+                    -- dropdown in an ordinary groupbox was fine.
+                    local OptBtn = _0xd5fe._0x36b7("TextButton", {Parent = List, BackgroundColor3 = _0xd5fe._0x0e5f.Theme.Outline, BackgroundTransparency = 1, Size = UDim2.new(1,0,0,26), Text = "", AutoButtonColor = false, BorderSizePixel = 0, ZIndex = List.ZIndex + 1})
+                    local OptText = _0xd5fe._0x36b7("TextLabel", {Parent = OptBtn, Text = opt, BackgroundTransparency = 1, Position = UDim2.new(0,12,0,0), Size = UDim2.new(1,-20,1,0), Font = _0xd5fe._0x0e5f.Font, TextColor3 = _0xd5fe._0x0e5f.Theme.TextDim, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = List.ZIndex + 2})
                     -- Accent | bar on the left of the selected option
-                    local OptBar = _0xd5fe._0x36b7("Frame", {Parent = OptBtn, BackgroundColor3 = _0xd5fe._0x0e5f.AccentColor, Position = UDim2.new(0,2,0.5,-6), Size = UDim2.new(0,2,0,12), BorderSizePixel = 0, Visible = false, ZIndex = 53})
+                    local OptBar = _0xd5fe._0x36b7("Frame", {Parent = OptBtn, BackgroundColor3 = _0xd5fe._0x0e5f.AccentColor, Position = UDim2.new(0,2,0.5,-6), Size = UDim2.new(0,2,0,12), BorderSizePixel = 0, Visible = false, ZIndex = List.ZIndex + 2})
 
                     OptionRefs[opt] = {Btn = OptBtn, Text = OptText, Bar = OptBar}
 
@@ -2615,14 +2624,7 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
                 end)
                 
                 Btn.MouseButton1Click:Connect(function()
-                    -- STATE COMES FROM THE GEOMETRY, not from a cached flag.
-                    -- `Open = not Open` desyncs: anything that collapses the
-                    -- list without clearing the flag leaves Open true while the
-                    -- list is 0 high, and the next click then CLOSES an already
-                    -- closed list - so the first press does nothing visible and
-                    -- the dropdown reads as broken. Measured live: 6 correct
-                    -- options with a 168px canvas inside a ListFrame 0 high.
-                    Open = ListFrame.Size.Y.Offset <= 1
+                    Open = not Open
                     if Open then
                         local height = math.min(#Options * 28 + 6, 150)
                         _0xd5fe._0xa4bd:Create(ListFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {Size = UDim2.new(1,0,0,height)}):Play()
@@ -2704,8 +2706,10 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
                 local OptionButtons = {}
                 
                 local function CreateOption(opt)
-                    local OptBtn = _0xd5fe._0x36b7("TextButton", {Parent = List, BackgroundTransparency = Selected[opt] and 0 or 1, BackgroundColor3 = _0xd5fe._0x0e5f.AccentColor, Size = UDim2.new(1,0,0,28), Text = "", AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 52})
-                    local OptText = _0xd5fe._0x36b7("TextLabel", {Parent = OptBtn, Text = opt, BackgroundTransparency = 1, Position = UDim2.new(0,10,0,0), Size = UDim2.new(1,-20,1,0), Font = _0xd5fe._0x0e5f.Font, TextColor3 = Selected[opt] and _0xd5fe._0x0e5f.Theme.Text or _0xd5fe._0x0e5f.Theme.TextDim, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 53})
+                    -- Relative to the list, for the popup reason documented in
+                    -- the single Dropdown's CreateOption above.
+                    local OptBtn = _0xd5fe._0x36b7("TextButton", {Parent = List, BackgroundTransparency = Selected[opt] and 0 or 1, BackgroundColor3 = _0xd5fe._0x0e5f.AccentColor, Size = UDim2.new(1,0,0,28), Text = "", AutoButtonColor = false, BorderSizePixel = 0, ZIndex = List.ZIndex + 1})
+                    local OptText = _0xd5fe._0x36b7("TextLabel", {Parent = OptBtn, Text = opt, BackgroundTransparency = 1, Position = UDim2.new(0,10,0,0), Size = UDim2.new(1,-20,1,0), Font = _0xd5fe._0x0e5f.Font, TextColor3 = Selected[opt] and _0xd5fe._0x0e5f.Theme.Text or _0xd5fe._0x0e5f.Theme.TextDim, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = List.ZIndex + 2})
                     
                     OptionButtons[opt] = {Btn = OptBtn, Text = OptText}
                     
@@ -2792,8 +2796,7 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
                 end)
                 
                 Btn.MouseButton1Click:Connect(function()
-                    -- Same geometry-derived state as the single Dropdown above.
-                    Open = ListFrame.Size.Y.Offset <= 1
+                    Open = not Open
                     if Open then
                         local height = math.min(#Options * 28 + 6, 180)
                         _0xd5fe._0xa4bd:Create(ListFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quart), {Size = UDim2.new(1,0,0,height)}):Play()
