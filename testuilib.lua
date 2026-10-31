@@ -30,7 +30,7 @@ _0xd5fe._0x740e = game:GetService("HttpService")
 _0xd5fe._0x0e5f = {
     -- bump this when publishing; print(Library.Version) to confirm which build
     -- the executor actually fetched (raw.githubusercontent caches for ~5 min)
-    Version = "v4.8.3-test",
+    Version = "v4.9-test",
     Open = true,
     ToggleKey = Enum.KeyCode.RightControl,
     AccentColor = Color3.fromRGB(96, 76, 255),
@@ -1240,16 +1240,22 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
         CloseResults()
         SearchInput.Text = ""
 
+        local popup = entry.ctx and entry.ctx.openPopup
         pcall(function()
             if entry.ctx then
                 if entry.ctx.activate then entry.ctx.activate() end
                 -- Subtab after the tab, or the tab switch would hide it again.
                 if entry.ctx.subActivate then entry.ctx.subActivate() end
+                -- Options behind a toggle's gear: open it, or the card we are
+                -- about to pulse is not on screen at all.
+                if popup then popup() end
             end
         end)
 
         -- One frame of slack so the page is actually visible before the pulse.
-        task.delay(0.08, function() PulseCard(entry.card) end)
+        -- A popup needs longer: Show waits two Heartbeats to measure itself and
+        -- then tweens its scale in.
+        task.delay(popup and 0.45 or 0.08, function() PulseCard(entry.card) end)
     end
 
     local function RunSearch(query)
@@ -1263,15 +1269,42 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
             return
         end
 
+        -- MATCH THE WAY PEOPLE ACTUALLY TYPE. A plain substring test over the
+        -- raw label fails on both of the obvious things: "autorun" misses
+        -- "Auto Run" because of the space, and "run auto" misses it because the
+        -- words are in the other order. Strip everything non-alphanumeric from
+        -- both sides and require every typed word to appear somewhere, so word
+        -- order, spacing, case and punctuation all stop mattering.
+        local function norm(s)
+            return (string.lower(tostring(s or "")):gsub("[^%w]", ""))
+        end
+
+        local tokens = {}
+        for w in string.gmatch(query, "%S+") do
+            local t = norm(w)
+            if t ~= "" then tokens[#tokens + 1] = t end
+        end
+        if #tokens == 0 then
+            CloseResults()
+            return
+        end
+
+        local function matchesAll(hay)
+            for _, t in ipairs(tokens) do
+                if not string.find(hay, t, 1, true) then return false end
+            end
+            return true
+        end
+
         -- Name matches rank above groupbox-only matches, so typing "destroy"
         -- surfaces the Destroy Player toggle before every option inside it.
         local hits, seen = {}, {}
         for _, e in ipairs(_0xd5fe._0x0e5f.SearchIndex) do
-            local n = string.lower(e.name)
-            local b = string.lower(e.box or "")
+            local n = norm(e.name)
+            local b = norm(e.box)
             local rank
-            if string.find(n, query, 1, true) then rank = 1
-            elseif string.find(b, query, 1, true) then rank = 2 end
+            if matchesAll(n) then rank = 1
+            elseif matchesAll(b) then rank = 2 end
             if rank then
                 local key = e.name .. "|" .. tostring(e.box)
                 if not seen[key] then
@@ -2023,7 +2056,10 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
                     _0xd5fe._0x0e5f._RegCtx = SubCtx
                     return self:CreateGroupbox(SRight, BoxName)
                 end,
-                CreateGroupbox = Tab.CreateGroupbox
+                CreateGroupbox = Tab.CreateGroupbox,
+                -- Exposed so anything calling CreateGroupbox directly can stamp
+                -- the right page first instead of inheriting a stale _RegCtx.
+                _Ctx = SubCtx
             }
         end
         
@@ -2359,6 +2395,39 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
 
                     local PANEL_W = 220
                     local Panel = CreatePopupPanel(PANEL_W)
+
+                    -- STAMP THE NAVIGATION CONTEXT BEFORE BUILDING THE POPUP'S
+                    -- GROUPBOX, or every option inside it is indexed under the
+                    -- wrong page.
+                    --
+                    -- `_RegCtx` is a single global that only the four
+                    -- tab/subtab groupbox helpers write, and CreateGroupbox
+                    -- reads it at build time. AddSettings calls CreateGroupbox
+                    -- DIRECTLY, so without this the popup inherits whatever was
+                    -- left there by the last ordinary groupbox - and since a
+                    -- script builds all its groupboxes up front and adds
+                    -- options later, that is permanently the LAST one. Measured
+                    -- on Bloodlines: 98 searchable options, every per-feature
+                    -- knob in the menu, all claiming to live in
+                    -- "Settings > Webhook" and all navigating there.
+                    --
+                    -- The enclosing groupbox's own Ctx is in scope here, which
+                    -- is exactly the page this gear sits on.
+                    local PopupCtx = {
+                        tabName     = Ctx and Ctx.tabName,
+                        subName     = Ctx and Ctx.subName,
+                        activate    = Ctx and Ctx.activate,
+                        subActivate = Ctx and Ctx.subActivate,
+                        -- Switching to the page is not enough for these: the
+                        -- option lives in a popup that is closed, so the search
+                        -- would pulse a card nobody can see. Open it too.
+                        openPopup = function()
+                            local p = Dots.AbsolutePosition
+                            Panel:Show(Vector2.new(p.X, p.Y + Dots.AbsoluteSize.Y + 6))
+                        end,
+                    }
+                    _0xd5fe._0x0e5f._RegCtx = PopupCtx
+
                     local SettingsGroup = ParentTab:CreateGroupbox(Panel.Gui, MenuName or Text)
 
                     Dots.MouseButton1Click:Connect(function()
@@ -3200,6 +3269,7 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
         
         -- Tab-level boxes (no subtab). Same context stamp as the subtab helpers.
         local TabCtx = { tabName = Name, subName = nil, activate = Activate, subActivate = nil }
+        Tab._Ctx = TabCtx   -- see the subtab table's _Ctx
         function Tab:AddLeftGroupbox(BoxName)
             _0xd5fe._0x0e5f._RegCtx = TabCtx
             return self:CreateGroupbox(Left, BoxName)
@@ -3810,6 +3880,10 @@ function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
     -- full-width section instead of dropping a half-width groupbox beside it.
     local CommunityGroup
     if self._cfgHost and self._cfgHostTab == tab and tab.CreateGroupbox then
+        -- Another direct CreateGroupbox, so stamp the page first. Without it
+        -- this section indexed under whatever groupbox was built last, which
+        -- put Community Configs on the wrong subtab in search results.
+        if tab._Ctx then _0xd5fe._0x0e5f._RegCtx = tab._Ctx end
         CommunityGroup = tab:CreateGroupbox(self._cfgHost, "Community Configs")
     else
         CommunityGroup = tab:AddLeftGroupbox("Community Configs")
